@@ -127,13 +127,13 @@ docker-compose down
 
 **Option C: Portainer Deployment**
 
-For Portainer or other remote deployments, see the complete [Deployment Guide](DEPLOYMENT.md).
+For Portainer deployment, see the complete [Deployment Guide](DEPLOYMENT.md).
 
 Quick summary:
-1. Build image locally: `docker build -t mcp-document-server:latest .`
-2. Push to registry (Docker Hub, GHCR, etc.)
-3. Use `docker-compose.portainer.yml` in Portainer
-4. Update image reference in the compose file
+1. Push your code to a git repository (already includes `uv.lock`)
+2. In Portainer: **Stacks** → **Add Stack** → **Repository** method
+3. Enter your git URL and set compose path to `docker-compose.yml`
+4. Deploy - Portainer builds and deploys automatically!
 
 **Testing the Server:**
 ```bash

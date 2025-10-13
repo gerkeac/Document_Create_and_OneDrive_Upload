@@ -8,13 +8,13 @@
 
 services:
   mcp-document-server:
-    # For local development: build from source
+    # Build from source (works for local dev AND Portainer git builds)
     build:
       context: .
       dockerfile: Dockerfile
 
-    # For Portainer/production: use pre-built image
-    # Uncomment the line below and comment out the 'build' section above
+    # Alternative: Use pre-built image instead of building
+    # Uncomment this line and comment out the 'build' section above:
     # image: your-registry/mcp-document-server:latest
 
     container_name: mcp-document-server

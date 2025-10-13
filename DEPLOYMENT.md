@@ -48,50 +48,44 @@ MCP_EXTERNAL_PORT=8080 docker-compose up
 
 ## Portainer Deployment
 
-Portainer supports multiple deployment methods. Choose the one that best fits your workflow.
+### Recommended: Build from Git Repository
 
-### Option A: Build from Git Repository (Recommended - Easiest)
+The easiest way to deploy is using Portainer's git repository build feature ([documentation](https://docs.portainer.io/user/docker/images/build)).
 
-Portainer can build directly from your git repository ([see documentation](https://docs.portainer.io/user/docker/images/build)).
+**Steps:**
 
-**Step 1: Ensure uv.lock is committed**
+1. **Ensure your code is in git** (already done - `uv.lock` is committed)
 
-```bash
-# Verify uv.lock is tracked in git
-git ls-files | grep uv.lock
-
-# If not found, add it
-git add uv.lock
-git commit -m "Add uv.lock for reproducible builds"
-git push
-```
-
-**Step 2: Deploy in Portainer**
-
-1. Open Portainer web interface
-2. Navigate to **Stacks** → **Add Stack**
-3. Name your stack (e.g., `mcp-document-server`)
-4. Choose **Repository** method
-5. Configure repository:
+2. **Deploy in Portainer:**
+   - Navigate to **Stacks** → **Add Stack**
+   - Name: `mcp-document-server`
+   - Method: **Repository**
    - **Repository URL**: Your git repository URL
      - Example: `https://github.com/username/repo.git`
    - **Repository reference**: `refs/heads/master` (or your branch name)
    - **Compose path**: `docker-compose.yml`
    - **Authentication**: Add credentials if private repository
-6. (Optional) Add environment variables:
-   - `MCP_EXTERNAL_PORT`: Host port (default: 3000)
-   - `LOG_LEVEL`: Logging level (default: INFO)
-7. (Optional) Enable **Automatic updates** to rebuild on git changes
-8. Click **Deploy the stack**
+   - **(Optional)** Environment variables:
+     - `MCP_EXTERNAL_PORT`: Host port (default: 3000)
+     - `LOG_LEVEL`: Logging level (default: INFO)
+   - **(Optional)** Enable **Automatic updates** to rebuild on git push
+   - Click **Deploy the stack**
 
-Portainer will clone your repository and build the image automatically!
+**Done!** Portainer will:
+- Clone your repository
+- Build the Docker image from the Dockerfile
+- Deploy the container
+
+No need to manually build or push images. The same `docker-compose.yml` works for both local development and Portainer!
 
 **Troubleshooting:**
-- If you get "uv.lock not found": Make sure the file is committed to git
-- If build fails: Check Portainer logs for detailed error messages
-- If authentication fails: Verify git credentials in Portainer settings
+- **"uv.lock not found"**: Verify it's in git: `git ls-files | grep uv.lock`
+- **Build fails**: Check Portainer logs for detailed error messages
+- **Auth fails**: Verify git credentials in Portainer settings
 
-### Option B: Use Pre-built Image from Docker Hub
+---
+
+### Alternative: Use Pre-built Image
 
 **Step 1: Build and Push Image**
 
