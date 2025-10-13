@@ -11,11 +11,15 @@ from mcp_document_server.server import mcp
 
 @pytest.mark.asyncio
 async def test_server_lists_tools() -> None:
-    """Test that server exposes the create_word_document tool."""
+    """Test that server exposes expected MCP tools."""
     async with Client(mcp) as client:
         tools = await client.list_tools()
 
-        assert len(tools) >= 1
+        assert len(tools) >= 2
+
+        tool_names = {tool.name for tool in tools}
+        assert "create_word_document" in tool_names
+        assert "health_check" in tool_names
 
         # Find create_word_document tool
         word_tool = None
@@ -27,6 +31,27 @@ async def test_server_lists_tools() -> None:
         assert word_tool is not None
         assert "Generate a Word document" in word_tool.description
         assert word_tool.inputSchema is not None
+
+
+@pytest.mark.asyncio
+async def test_health_check() -> None:
+    """Test the health check endpoint."""
+    async with Client(mcp) as client:
+        result = await client.call_tool("health_check", arguments={})
+
+        assert len(result.content) > 0
+        content = result.content[0]
+        assert isinstance(content, TextContent)
+
+        response = json.loads(content.text)
+        assert response["status"] in ["healthy", "degraded"]
+        assert "uptime_seconds" in response
+        assert "version" in response
+        assert response["version"] == "0.3.0"
+        assert response["phase"] == "Phase 3 - Full Office Suite"
+        assert "temp_directory" in response
+        assert "temp_directory_accessible" in response
+        assert "cached_files" in response
 
 
 @pytest.mark.asyncio
@@ -192,7 +217,7 @@ async def test_create_word_document_invalid_json() -> None:
 
 @pytest.mark.asyncio
 async def test_create_word_document_onedrive_placeholder() -> None:
-    """Test OneDrive upload flag (Phase 2 placeholder)."""
+    """Test OneDrive upload flag (Phase 2 - requires authentication)."""
     async with Client(mcp) as client:
         result = await client.call_tool(
             "create_word_document",
@@ -207,8 +232,11 @@ async def test_create_word_document_onedrive_placeholder() -> None:
 
         response = json.loads(result.content[0].text)
         assert response["success"] is True
-        assert "not implemented yet" in response["message"].lower()
-        assert response["onedrive_path"] == "/Documents/Test"
+        # In test environment without OAuth context, we expect auth error in message
+        assert (
+            "authentication" in response["message"].lower()
+            or "onedrive upload failed" in response["message"].lower()
+        )
 
         # Cleanup
         local_path = Path(response["local_path"])

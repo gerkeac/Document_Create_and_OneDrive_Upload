@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(uv run pre-commit run:*)",
-      "Bash(uv run pytest:*)"
+      "Bash(uv run pytest:*)",
+      "Bash(uv sync:*)",
+      "Bash(touch:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv pip install:*)",
+      "Bash(uv run python -m pytest:*)",
+      "Bash(uv run:*)",
+      "Bash(docker-compose config:*)",
+      "Bash(MCP_EXTERNAL_PORT=8080 docker-compose config:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
