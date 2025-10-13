@@ -51,6 +51,8 @@ See [TASK_TRACKER.md](TASK_TRACKER.md) for detailed progress tracking.
 
 - [Product Requirements Document (PRD)](PRD.md) - Complete project specification
 - [Task Tracker](TASK_TRACKER.md) - Development progress and task breakdown
+- [Deployment Guide](DEPLOYMENT.md) - Docker, Portainer, and production deployment
+- [Azure Setup Guide](AZURE_SETUP.md) - OAuth and Azure App Registration
 - [FastMCP Development Guidelines](AGENTS.md) - Required reading for developers
 - [LibreChat MCP Integration](LIBRECHAT_MCP.md) - OAuth and multi-user patterns
 
@@ -122,6 +124,16 @@ docker-compose logs -f
 # Stop the container
 docker-compose down
 ```
+
+**Option C: Portainer Deployment**
+
+For Portainer or other remote deployments, see the complete [Deployment Guide](DEPLOYMENT.md).
+
+Quick summary:
+1. Build image locally: `docker build -t mcp-document-server:latest .`
+2. Push to registry (Docker Hub, GHCR, etc.)
+3. Use `docker-compose.portainer.yml` in Portainer
+4. Update image reference in the compose file
 
 **Testing the Server:**
 ```bash

@@ -30,7 +30,8 @@ ENV/
 
 # uv
 .uv/
-uv.lock
+# NOTE: uv.lock should be committed for reproducible builds (like package-lock.json)
+# Do NOT ignore uv.lock
 
 # PyCharm
 .idea/
