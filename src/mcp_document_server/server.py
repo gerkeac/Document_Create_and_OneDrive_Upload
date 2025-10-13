@@ -658,5 +658,17 @@ async def list_onedrive_folders(
 
 
 if __name__ == "__main__":
-    # Run the server
-    mcp.run()
+    # Check for HTTP mode via environment variables
+    server_port = os.environ.get("MCP_SERVER_PORT")
+    server_host = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")
+
+    if server_port:
+        # Run in HTTP (streamable) mode for Docker deployment
+        # Using 'http' transport (not 'sse') - recommended for production
+        # Provides full bidirectional communication and better scalability
+        logger.info(f"Starting MCP server in HTTP (streamable) mode on {server_host}:{server_port}")
+        mcp.run(transport="http", port=int(server_port), host=server_host)
+    else:
+        # Run in STDIO mode for local development
+        logger.info("Starting MCP server in STDIO mode")
+        mcp.run()
