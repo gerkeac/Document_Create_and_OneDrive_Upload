@@ -36,7 +36,9 @@ uv.lock
 .idea/
 
 # VS Code
-.vscode/
+# .vscode/ - Keeping settings.json for consistent dev environment
+.vscode/launch.json
+.vscode/tasks.json
 *.code-workspace
 
 # Testing
