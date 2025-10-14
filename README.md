@@ -9,7 +9,8 @@ An MCP (Model Context Protocol) server that generates Microsoft Office documents
 - 📈 **Excel Spreadsheets**: Build `.xlsx` files with data, formulas, and formatting
 - ☁️ **OneDrive Integration**: Automatic upload to user's OneDrive with OAuth authentication
 - 🔐 **Multi-User Support**: Secure, isolated sessions for up to 100 concurrent users
-- 🔄 **LibreChat Integration**: Native MCP support with OAuth flow
+- 🔄 **LibreChat Integration**: Native MCP support with OAuth capability broadcasting
+- 🔒 **OAuth Discovery**: Automatic authentication requirement discovery via MCP protocol
 
 ## Project Status
 
@@ -53,8 +54,10 @@ See [TASK_TRACKER.md](TASK_TRACKER.md) for detailed progress tracking.
 - [Task Tracker](TASK_TRACKER.md) - Development progress and task breakdown
 - [Deployment Guide](DEPLOYMENT.md) - Docker, Portainer, and production deployment
 - [Azure Setup Guide](AZURE_SETUP.md) - OAuth and Azure App Registration
+- [OAuth Capability Broadcasting](OAUTH_CAPABILITY_BROADCASTING.md) - **NEW!** MCP protocol-level authentication
 - [FastMCP Development Guidelines](AGENTS.md) - Required reading for developers
 - [LibreChat MCP Integration](LIBRECHAT_MCP.md) - OAuth and multi-user patterns
+- [Logging Guide](LOGGING_GUIDE.md) - Debug logging and troubleshooting
 
 ## Prerequisites
 

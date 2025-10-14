@@ -33,6 +33,7 @@ services:
       # MCP Server Configuration
       - MCP_SERVER_PORT=${MCP_SERVER_PORT:-3000}
       - MCP_SERVER_HOST=0.0.0.0
+      - MCP_BASE_URL=${MCP_BASE_URL:-}
 
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -40,10 +41,17 @@ services:
       - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}    # 10MB per file (default)
       - LOG_BACKUP_COUNT=${LOG_BACKUP_COUNT:-5}     # Keep 5 backup files (60MB total)
 
-      # Microsoft OAuth - NOT NEEDED HERE
-      # OAuth tokens are passed by LibreChat via Authorization header
-      # LibreChat handles token storage, refresh, and encryption
-      # This server operates statelessly - no token storage required
+      # Microsoft OAuth Configuration (Optional - enables OAuth capability broadcasting)
+      # When configured, the server broadcasts OAuth requirements via MCP protocol
+      # Clients like LibreChat can auto-discover and handle OAuth flow automatically
+      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
+      - MICROSOFT_TENANT_ID=${MICROSOFT_TENANT_ID:-common}
+      - MICROSOFT_OAUTH_SCOPES=${MICROSOFT_OAUTH_SCOPES:-Files.ReadWrite User.Read offline_access}
+      - MCP_AUTH_REDIRECT_PATH=${MCP_AUTH_REDIRECT_PATH:-/oauth/callback}
+
+      # For testing without LibreChat (not recommended for production)
+      - MICROSOFT_ACCESS_TOKEN=${MICROSOFT_ACCESS_TOKEN:-}
 
       # OneDrive Defaults
       - DEFAULT_ONEDRIVE_PATH=/Documents/LibreChat

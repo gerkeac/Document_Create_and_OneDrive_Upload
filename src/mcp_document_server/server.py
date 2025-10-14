@@ -13,6 +13,7 @@ from typing import Any
 from fastmcp import FastMCP
 from fastmcp.server import Context
 
+from mcp_document_server.auth import create_auth_provider
 from mcp_document_server.generators.excel_generator import ExcelGenerator
 from mcp_document_server.generators.powerpoint_generator import PowerPointGenerator
 from mcp_document_server.generators.word_generator import WordGenerator
@@ -67,8 +68,19 @@ if log_file:
     )
 logger.info(f"Log level set to: {log_level}")
 
-# Initialize FastMCP server
-mcp = FastMCP("Document Generator")
+# Initialize OAuth authentication provider (if configured)
+# This enables MCP protocol-level OAuth capability broadcasting
+auth_provider = create_auth_provider()
+
+# Initialize FastMCP server with optional authentication
+if auth_provider:
+    logger.info("Initializing FastMCP server with OAuth capability broadcasting")
+    mcp = FastMCP("Document Generator", auth=auth_provider)
+else:
+    logger.info(
+        "Initializing FastMCP server in passthrough mode (no OAuth capability broadcasting)"
+    )
+    mcp = FastMCP("Document Generator")
 
 # Create a temporary directory for generated files
 TEMP_DIR = Path(tempfile.gettempdir()) / "mcp_documents"
@@ -76,6 +88,116 @@ TEMP_DIR.mkdir(exist_ok=True)
 
 # Track server start time for uptime
 SERVER_START_TIME = time.time()
+
+
+def extract_oauth_token(ctx: Context | None) -> dict[str, str]:
+    """
+    Extract OAuth access token from request context.
+
+    When FastMCP auth is enabled, tokens are automatically validated and available
+    in ctx.meta. When auth is disabled (passthrough mode), tokens are extracted
+    from Authorization headers.
+
+    Args:
+        ctx: Request context from FastMCP
+
+    Returns:
+        Dictionary with 'access_token' and 'user_id'
+
+    Raises:
+        ValueError: If OAuth token is not available or invalid
+        OneDriveAuthError: If authentication fails
+    """
+    if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
+        logger.error("No request context available for OAuth token extraction")
+        raise ValueError(
+            "OneDrive upload requires OAuth authentication. "
+            "No request context available. "
+            "Ensure LibreChat is configured to pass OAuth tokens."
+        )
+
+    # Log context structure for debugging
+    logger.debug(f"Context meta type: {type(ctx.meta)}")
+    logger.debug(
+        f"Context meta keys: {list(ctx.meta.keys()) if isinstance(ctx.meta, dict) else 'Not a dict'}"
+    )
+
+    # Check if we have validated OAuth user info (when auth is enabled)
+    if isinstance(ctx.meta, dict) and "user" in ctx.meta:
+        logger.info("OAuth token validated by FastMCP auth provider")
+        user_info = ctx.meta["user"]
+        logger.debug(
+            f"User info keys: {list(user_info.keys()) if isinstance(user_info, dict) else 'Not a dict'}"
+        )
+
+        # Extract access token from validated OAuth context
+        # The OIDCProxy stores the access token in the user context
+        if "access_token" in user_info:
+            access_token = user_info["access_token"]
+            user_id = user_info.get("sub") or user_info.get("oid") or user_info.get("id", "unknown")
+
+            logger.info(
+                f"✓ OAuth token extracted from authenticated context for user: {user_id[:8]}..."
+            )
+            return {"access_token": access_token, "user_id": user_id}
+
+    # Fallback: Extract from headers (passthrough mode or LibreChat manual config)
+    headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
+
+    if headers:
+        logger.info(f"Received {len(headers)} header(s) from request")
+        logger.debug(f"Header keys (case-sensitive): {list(headers.keys())}")
+
+        # Check for Authorization header (case-insensitive)
+        auth_header = headers.get("authorization") or headers.get("Authorization")
+        if auth_header:
+            # Mask token for security but show it exists
+            if auth_header.startswith("Bearer "):
+                token_preview = (
+                    auth_header[7:17] + "..." + auth_header[-8:]
+                    if len(auth_header) > 50
+                    else "[too short]"
+                )
+                logger.info(f"✓ Authorization header found: Bearer {token_preview}")
+                logger.debug(f"Token length: {len(auth_header) - 7} chars")
+            else:
+                logger.warning(
+                    f"Authorization header present but doesn't start with 'Bearer ': {auth_header[:20]}..."
+                )
+        else:
+            logger.warning("✗ No Authorization header found in request")
+            logger.debug(f"Available headers: {', '.join(headers.keys())}")
+
+        # Check for user ID header
+        user_id_header = headers.get("x-user-id") or headers.get("X-User-ID")
+        if user_id_header:
+            logger.info(f"✓ User-ID header found: {user_id_header[:8]}...")
+        else:
+            logger.warning("✗ No X-User-ID header found in request")
+
+        # Attempt token extraction using existing TokenExtractor
+        if headers:
+            try:
+                token_data = TokenExtractor.extract_from_headers(headers)
+                logger.info(
+                    f"✓ OAuth token extracted from headers for user: {token_data['user_id'][:8]}..."
+                )
+                return token_data
+            except Exception as e:
+                logger.error(f"Failed to extract token from headers: {e!s}")
+
+    # Final fallback: check environment for testing
+    logger.warning("Attempting fallback to environment variable")
+    test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
+    if test_token:
+        logger.info("Using test token from environment")
+        return {"access_token": test_token, "user_id": "test-user"}
+
+    raise ValueError(
+        "OneDrive upload requires OAuth authentication. "
+        "Missing Authorization header or authenticated OAuth context. "
+        "Please authenticate via LibreChat."
+    )
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -214,76 +336,8 @@ async def create_word_document(
             logger.info(f"OneDrive upload requested for path: {onedrive_path}")
 
             try:
-                # Extract OAuth token from request headers
-                if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
-                    logger.error("No request context available for OAuth token extraction")
-                    logger.debug(
-                        f"ctx={ctx}, hasattr(ctx, 'meta')={hasattr(ctx, 'meta') if ctx else 'N/A'}"
-                    )
-                    raise ValueError(
-                        "OneDrive upload requires OAuth authentication. "
-                        "No request context available. "
-                        "Ensure LibreChat is configured to pass OAuth tokens."
-                    )
-
-                # Get headers from context
-                logger.debug(f"Context meta type: {type(ctx.meta)}")
-                logger.debug(
-                    f"Context meta keys: {list(ctx.meta.keys()) if isinstance(ctx.meta, dict) else 'Not a dict'}"
-                )
-
-                headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
-
-                # Enhanced debug logging for headers
-                if headers:
-                    logger.info(f"Received {len(headers)} header(s) from request")
-                    logger.debug(f"Header keys (case-sensitive): {list(headers.keys())}")
-
-                    # Check for Authorization header (case-insensitive)
-                    auth_header = headers.get("authorization") or headers.get("Authorization")
-                    if auth_header:
-                        # Mask token for security but show it exists
-                        if auth_header.startswith("Bearer "):
-                            token_preview = (
-                                auth_header[7:17] + "..." + auth_header[-8:]
-                                if len(auth_header) > 50
-                                else "[too short]"
-                            )
-                            logger.info(f"✓ Authorization header found: Bearer {token_preview}")
-                            logger.debug(f"Token length: {len(auth_header) - 7} chars")
-                        else:
-                            logger.warning(
-                                f"Authorization header present but doesn't start with 'Bearer ': {auth_header[:20]}..."
-                            )
-                    else:
-                        logger.warning("✗ No Authorization header found in request")
-                        logger.debug(f"Available headers: {', '.join(headers.keys())}")
-
-                    # Check for user ID header
-                    user_id_header = headers.get("x-user-id") or headers.get("X-User-ID")
-                    if user_id_header:
-                        logger.info(f"✓ User-ID header found: {user_id_header[:8]}...")
-                    else:
-                        logger.warning("✗ No X-User-ID header found in request")
-                else:
-                    logger.warning("No headers found in request context")
-
-                if not headers:
-                    logger.warning("Attempting fallback to environment variable")
-                    # Fallback: check if token is in environment (for testing)
-                    test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
-                    if test_token:
-                        logger.info("Using test token from environment")
-                        headers = {"Authorization": f"Bearer {test_token}"}
-                    else:
-                        raise ValueError(
-                            "OneDrive upload requires OAuth authentication. "
-                            "Missing Authorization header. "
-                            "Please authenticate via LibreChat."
-                        )
-
-                # Extract and validate token
-                token_data = TokenExtractor.extract_from_headers(headers)
+                # Extract OAuth token (handles both auth-enabled and passthrough modes)
+                token_data = extract_oauth_token(ctx)
 
                 # Create OneDrive client
                 onedrive_client = OneDriveClient(
@@ -417,30 +471,8 @@ async def create_powerpoint_presentation(
             logger.info(f"OneDrive upload requested for path: {onedrive_path}")
 
             try:
-                # Extract OAuth token from request headers
-                if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
-                    raise ValueError(
-                        "OneDrive upload requires OAuth authentication. "
-                        "No request context available."
-                    )
-
-                # Get headers from context
-                headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
-
-                if not headers:
-                    logger.warning("No headers found in request context, trying environment")
-                    test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
-                    if test_token:
-                        logger.info("Using test token from environment")
-                        headers = {"Authorization": f"Bearer {test_token}"}
-                    else:
-                        raise ValueError(
-                            "OneDrive upload requires OAuth authentication. "
-                            "Missing Authorization header."
-                        )
-
-                # Extract and validate token
-                token_data = TokenExtractor.extract_from_headers(headers)
+                # Extract OAuth token (handles both auth-enabled and passthrough modes)
+                token_data = extract_oauth_token(ctx)
 
                 # Create OneDrive client
                 onedrive_client = OneDriveClient(
@@ -575,30 +607,8 @@ async def create_excel_spreadsheet(
             logger.info(f"OneDrive upload requested for path: {onedrive_path}")
 
             try:
-                # Extract OAuth token from request headers
-                if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
-                    raise ValueError(
-                        "OneDrive upload requires OAuth authentication. "
-                        "No request context available."
-                    )
-
-                # Get headers from context
-                headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
-
-                if not headers:
-                    logger.warning("No headers found in request context, trying environment")
-                    test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
-                    if test_token:
-                        logger.info("Using test token from environment")
-                        headers = {"Authorization": f"Bearer {test_token}"}
-                    else:
-                        raise ValueError(
-                            "OneDrive upload requires OAuth authentication. "
-                            "Missing Authorization header."
-                        )
-
-                # Extract and validate token
-                token_data = TokenExtractor.extract_from_headers(headers)
+                # Extract OAuth token (handles both auth-enabled and passthrough modes)
+                token_data = extract_oauth_token(ctx)
 
                 # Create OneDrive client
                 onedrive_client = OneDriveClient(
@@ -669,26 +679,8 @@ async def list_onedrive_folders(
     try:
         logger.info(f"Listing OneDrive folders from: {parent_path}")
 
-        # Extract OAuth token from request headers
-        if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
-            raise ValueError(
-                "OneDrive access requires OAuth authentication. " "No request context available."
-            )
-
-        # Get headers from context
-        headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
-
-        if not headers:
-            # Fallback for testing
-            test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
-            if test_token:
-                logger.info("Using test token from environment")
-                headers = {"Authorization": f"Bearer {test_token}"}
-            else:
-                raise ValueError("Missing Authorization header. Please authenticate via LibreChat.")
-
-        # Extract and validate token
-        token_data = TokenExtractor.extract_from_headers(headers)
+        # Extract OAuth token (handles both auth-enabled and passthrough modes)
+        token_data = extract_oauth_token(ctx)
 
         # Create OneDrive client
         onedrive_client = OneDriveClient(
