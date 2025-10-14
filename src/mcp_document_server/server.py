@@ -12,6 +12,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.server import Context
+from starlette.responses import JSONResponse
 
 from mcp_document_server.auth import create_auth_provider
 from mcp_document_server.generators.excel_generator import ExcelGenerator
@@ -76,6 +77,38 @@ auth_provider = create_auth_provider()
 if auth_provider:
     logger.info("Initializing FastMCP server with OAuth capability broadcasting")
     mcp = FastMCP("Document Generator", auth=auth_provider)
+
+    # Add RFC 9728 OAuth Protected Resource Metadata endpoint
+    # This is required by MCP protocol but not provided by FastMCP's OIDCProxy
+    @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
+    def oauth_protected_resource_metadata(request: Any) -> JSONResponse:
+        """
+        OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+        Provides authorization server information for MCP clients to discover
+        where to obtain access tokens for this protected resource.
+
+        Args:
+            request: Starlette Request object (required by FastMCP custom routes)
+
+        Returns:
+            JSONResponse with authorization_servers list
+        """
+        base_url = os.environ.get("MCP_BASE_URL", "http://localhost:3000")
+
+        # Return metadata pointing to our OAuth authorization server
+        metadata = {
+            "resource": base_url,
+            "authorization_servers": [base_url],
+            # Optional: specify required scopes
+            "scopes_supported": ["Files.ReadWrite", "User.Read", "offline_access"],
+            "bearer_methods_supported": ["header"],
+            "resource_documentation": f"{base_url}/docs",
+        }
+
+        return JSONResponse(metadata)
+
+    logger.info("✓ Added OAuth protected resource metadata endpoint")
 else:
     logger.info(
         "Initializing FastMCP server in passthrough mode (no OAuth capability broadcasting)"

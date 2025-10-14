@@ -21,7 +21,12 @@
       "Bash(docker-compose down:*)",
       "Bash(cat:*)",
       "Bash(git rm:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(curl -s http://localhost:3010/.well-known/oauth-protected-resource)",
+      "Bash(curl -s -X POST http://localhost:3010/mcp/register -H \"Content-Type: application/json\" -d '{\"\"client_name\"\":\"\"test\"\"}')",
+      "Bash(python3:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
