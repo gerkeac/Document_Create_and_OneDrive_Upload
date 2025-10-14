@@ -60,7 +60,15 @@ class OneDriveClient:
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
-        logger.info(f"OneDriveClient initialized for user {user_id[:8]}...")
+
+        # Debug logging for token
+        token_preview = (
+            access_token[:10] + "..." + access_token[-8:] if len(access_token) > 20 else "[short]"
+        )
+        logger.info(
+            f"OneDriveClient initialized for user {user_id[:8]}... (token preview: {token_preview})"
+        )
+        logger.debug(f"Token length: {len(access_token)} chars")
 
     async def _make_request(
         self,
@@ -103,7 +111,19 @@ class OneDriveClient:
 
                 # Check for authentication errors
                 if response.status_code == 401:
-                    logger.error(f"Authentication failed for user {self.user_id[:8]}...")
+                    logger.error(f"Authentication failed (401) for user {self.user_id[:8]}...")
+                    logger.debug(f"Request URL: {url}")
+                    logger.debug(
+                        f"Token preview: {self.access_token[:10]}...{self.access_token[-8:]}"
+                    )
+
+                    # Try to get error details
+                    try:
+                        error_data = response.json()
+                        logger.error(f"Microsoft API error: {error_data}")
+                    except Exception:
+                        logger.debug(f"Response body: {response.text[:500]}")
+
                     raise OneDriveAuthError(
                         "Access token is invalid or expired. "
                         "Please re-authenticate via LibreChat."

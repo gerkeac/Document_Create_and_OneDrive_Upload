@@ -6,6 +6,7 @@ import os
 import tempfile
 import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -23,14 +24,48 @@ from mcp_document_server.onedrive import (
 )
 
 # Configure logging
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+log_file = os.environ.get("LOG_FILE", None)
+# Log rotation settings (configurable via environment variables)
+log_max_bytes = int(os.environ.get("LOG_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
+log_backup_count = int(os.environ.get("LOG_BACKUP_COUNT", 5))  # Keep 5 backup files
+
+handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+# Add rotating file handler if LOG_FILE is specified
+if log_file:
+    log_dir = Path(log_file).parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use RotatingFileHandler to prevent unlimited log growth
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=log_max_bytes,
+        backupCount=log_backup_count,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    handlers.append(file_handler)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-    ],
+    handlers=handlers,
 )
 logger = logging.getLogger(__name__)
+
+# Log startup information
+if log_file:
+    logger.info(f"File logging enabled: {log_file}")
+    logger.info(
+        f"Log rotation: {log_max_bytes / 1024 / 1024:.1f}MB per file, {log_backup_count} backups"
+    )
+    logger.info(
+        f"Maximum disk usage for logs: ~{(log_max_bytes * (log_backup_count + 1)) / 1024 / 1024:.1f}MB"
+    )
+logger.info(f"Log level set to: {log_level}")
 
 # Initialize FastMCP server
 mcp = FastMCP("Document Generator")
@@ -181,6 +216,10 @@ async def create_word_document(
             try:
                 # Extract OAuth token from request headers
                 if not ctx or not hasattr(ctx, "meta") or not ctx.meta:
+                    logger.error("No request context available for OAuth token extraction")
+                    logger.debug(
+                        f"ctx={ctx}, hasattr(ctx, 'meta')={hasattr(ctx, 'meta') if ctx else 'N/A'}"
+                    )
                     raise ValueError(
                         "OneDrive upload requires OAuth authentication. "
                         "No request context available. "
@@ -188,10 +227,49 @@ async def create_word_document(
                     )
 
                 # Get headers from context
+                logger.debug(f"Context meta type: {type(ctx.meta)}")
+                logger.debug(
+                    f"Context meta keys: {list(ctx.meta.keys()) if isinstance(ctx.meta, dict) else 'Not a dict'}"
+                )
+
                 headers = ctx.meta.get("headers", {}) if isinstance(ctx.meta, dict) else {}
 
+                # Enhanced debug logging for headers
+                if headers:
+                    logger.info(f"Received {len(headers)} header(s) from request")
+                    logger.debug(f"Header keys (case-sensitive): {list(headers.keys())}")
+
+                    # Check for Authorization header (case-insensitive)
+                    auth_header = headers.get("authorization") or headers.get("Authorization")
+                    if auth_header:
+                        # Mask token for security but show it exists
+                        if auth_header.startswith("Bearer "):
+                            token_preview = (
+                                auth_header[7:17] + "..." + auth_header[-8:]
+                                if len(auth_header) > 50
+                                else "[too short]"
+                            )
+                            logger.info(f"✓ Authorization header found: Bearer {token_preview}")
+                            logger.debug(f"Token length: {len(auth_header) - 7} chars")
+                        else:
+                            logger.warning(
+                                f"Authorization header present but doesn't start with 'Bearer ': {auth_header[:20]}..."
+                            )
+                    else:
+                        logger.warning("✗ No Authorization header found in request")
+                        logger.debug(f"Available headers: {', '.join(headers.keys())}")
+
+                    # Check for user ID header
+                    user_id_header = headers.get("x-user-id") or headers.get("X-User-ID")
+                    if user_id_header:
+                        logger.info(f"✓ User-ID header found: {user_id_header[:8]}...")
+                    else:
+                        logger.warning("✗ No X-User-ID header found in request")
+                else:
+                    logger.warning("No headers found in request context")
+
                 if not headers:
-                    logger.warning("No headers found in request context, trying environment")
+                    logger.warning("Attempting fallback to environment variable")
                     # Fallback: check if token is in environment (for testing)
                     test_token = os.environ.get("MICROSOFT_ACCESS_TOKEN")
                     if test_token:

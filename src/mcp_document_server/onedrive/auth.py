@@ -43,31 +43,49 @@ class TokenExtractor:
         Raises:
             ValueError: If required headers are missing or malformed
         """
+        # Debug: Log all header keys received
+        logger.debug(f"Extracting token from {len(headers)} header(s)")
+        logger.debug(f"Header keys received: {list(headers.keys())}")
+
         # Extract Authorization header
         auth_header = headers.get("authorization") or headers.get("Authorization")
 
         if not auth_header:
+            logger.error("Authorization header not found")
+            logger.debug(
+                f"Searched for 'authorization' and 'Authorization' in: {list(headers.keys())}"
+            )
             raise ValueError(
                 "Missing Authorization header. "
                 "Ensure LibreChat is configured to pass OAuth tokens to this MCP server."
             )
 
+        logger.debug(f"Authorization header found, length: {len(auth_header)}")
+
         # Parse Bearer token
         if not auth_header.startswith("Bearer "):
+            logger.error(f"Invalid Authorization format: {auth_header[:30]}...")
             raise ValueError("Invalid Authorization header format. Expected 'Bearer <token>'.")
 
         access_token = auth_header.replace("Bearer ", "", 1).strip()
 
         if not access_token:
+            logger.error("Authorization header contains 'Bearer ' but no token")
             raise ValueError("Empty access token in Authorization header.")
 
         # Extract user ID (for multi-user support)
         user_id = headers.get("x-user-id") or headers.get("X-User-ID") or "unknown"
 
-        logger.info(
-            f"Extracted OAuth token for user: {user_id[:8]}... "
-            f"(token length: {len(access_token)})"
+        # Mask token for security logging
+        token_preview = (
+            access_token[:10] + "..." + access_token[-8:] if len(access_token) > 20 else "[short]"
         )
+
+        logger.info(
+            f"✓ Successfully extracted OAuth token for user: {user_id[:8]}... "
+            f"(token length: {len(access_token)}, preview: {token_preview})"
+        )
+        logger.debug(f"Token starts with: {access_token[:20]}...")
 
         return {
             "access_token": access_token,
