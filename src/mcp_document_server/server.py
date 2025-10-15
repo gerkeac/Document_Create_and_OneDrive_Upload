@@ -97,6 +97,7 @@ if auth_provider:
         base_url = os.environ.get("MCP_BASE_URL", "http://localhost:3000")
 
         # Return metadata pointing to our OAuth authorization server
+        # Include registration_endpoint for dynamic client registration (RFC 7591)
         metadata = {
             "resource": base_url,
             "authorization_servers": [base_url],
@@ -104,6 +105,8 @@ if auth_provider:
             "scopes_supported": ["Files.ReadWrite", "User.Read", "offline_access"],
             "bearer_methods_supported": ["header"],
             "resource_documentation": f"{base_url}/docs",
+            # Dynamic Client Registration endpoint
+            "registration_endpoint": f"{base_url}/register",
         }
 
         return JSONResponse(metadata)
